@@ -14,17 +14,31 @@ Python 3.9+
 
 # CLI configuration
 
-Set environment variables :
+Set environment variables (in an environment file sourced by your shell, or through `export` shell statements) :
 
-    export HARBOR_USER=me
-    export HARBOR_PASSWORD=secret
-    export HARBOR_REGISTRY=registry.example.org
+    HARBOR_USER=me
+    HARBOR_PASSWORD=secret
+    HARBOR_REGISTRY=registry.example.org
 
-Or use command line arguments `-u`, `-p` (unsafe) and `-r` to set them.
+# Docker usage
+
+An image is available at the following tag
+
+    docker.io/nipil/harbor_ls
+
+You can run it with something allong the following
+
+    docker run --rm --env-file harbor_ls.env \
+        -i -t docker.io/nipil/harbor_ls \
+        -l info -f json myproject yourproject/thisrepo
+
+# Public Harbor demo server
+
+You can create a throwaway account on https://demo.goharbor.io to try this package out.
 
 # CLI usage
 
-Additional options available :
+Apart from environment variables, which you can set using `-u`,`-p` (unsafe) and`-r`, other options are available :
 
 - `--level` for logging levels
 - `--format` for display format (defaults to `text`, `json` available)
