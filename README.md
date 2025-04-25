@@ -6,17 +6,23 @@ No dependency (stdlib only)
 
 Python 3.9+
 
-# Configuration
+# Python usage
+
+    from harbor_ls import HarborLs
+    scanner = HarborLs('reg.example.org', 'me', 'secret', ['myproject', 'yourproject/thisrepo'])
+    result_dict = scanner.ls()
+
+# CLI configuration
 
 Set environment variables :
 
-    export HARBOR_USER=XXX
-    export HARBOR_PASSWORD=YYY
-    export HARBOR_REGISTRY=ZZZ
+    export HARBOR_USER=me
+    export HARBOR_PASSWORD=secret
+    export HARBOR_REGISTRY=registry.example.org
 
 Or use command line arguments `-u`, `-p` (unsafe) and `-r` to set them.
 
-# Usage
+# CLI usage
 
 Additional options available :
 
@@ -29,11 +35,11 @@ You can filter the projects/repos scanned by using additional arguments in the f
 - `projectname/reponame` : this would scan all artefacts of the specified project/repo
 - more than one filter can be provided on the command line, in which case any filter matching is done
 
-Example :
+Example (with command line options instead of environment variables) :
 
-    python3 cli.py -u me -p secret -r registry.example.org -f json myproject yourproject/thisrepo
+    python3 -m harbor_ls -u me -p secret -r registry.example.org -f json myproject yourproject/thisrepo
 
-# Sample output
+# CLI sample output
 
 Text ouput (with logging on stderr) :
 
