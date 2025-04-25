@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "harbor_ls"
-version = "1.0.2"
+version = "1.0.3"
 authors = [{ name = "nipil", email = "nipil@users.noreply.github.com" },
 ]
 description = "Simple cli to scan Harbor project/repo/artefact API"

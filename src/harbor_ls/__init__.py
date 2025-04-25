@@ -1,11 +1,20 @@
 import json
 import logging
 import urllib.error
+import urllib.parse
 import urllib.request
 from base64 import b64encode
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 
 
 class HarborApi:
+
+    @staticmethod
+    def activate_urllib_debug_logging() -> None:
+        handlers = [urllib.request.HTTPHandler(debuglevel=1), urllib.request.HTTPSHandler(debuglevel=1)]
+        opener = urllib.request.build_opener(*handlers)
+        urllib.request.install_opener(opener)
 
     def __init__(self, registry_fqdn: str, username: str, password: str):
         if registry_fqdn is None:
@@ -31,7 +40,12 @@ class HarborApi:
         url = f'https://{self.registry_fqdn}/api/v2.0/projects/{project}/repositories'
         return self.authenticated_get(url)
 
-    def project_repo_artefacts(self, project: str, repo: str) -> list[dict]:
+    def project_repo_artifacts(self, project: str, repo: str) -> list[dict]:
+        # According to Harbor API documentation : https://demo.goharbor.io/devcenter-api-2.0
+        #   If the repository name contains slash, encode it twice over with URL encoding
+        #   e.g. a/b -> a%2Fb -> a%252Fb
+        repo = urllib.parse.quote(repo, safe='')  # first force-encodes '/' by excluding it from safe characters
+        repo = urllib.parse.quote(repo)  # then once more, to stop the server from reinterpreting it as '/'
         url = f'https://{self.registry_fqdn}/api/v2.0/projects/{project}/repositories/{repo}/artifacts'
         return self.authenticated_get(url)
 
@@ -58,39 +72,45 @@ class HarborLs:
         return [item['name'] for item in self.api.projects()]
 
     def get_project_repos(self, project: str) -> list[str]:
-        return [item['name'].split('/')[1] for item in self.api.project_repos(project)]
+        return [item['name'].split('/', maxsplit=1)[1] for item in self.api.project_repos(project)]
 
-    def get_project_repo_artefacts(self, project: str, repo: str) -> list[dict]:
-        return [{'time': artefact['push_time'], 'digest': artefact['digest'],
-                 'tags': [] if artefact['tags'] is None else [tag['name'] for tag in artefact['tags']]} for artefact in
-                self.api.project_repo_artefacts(project, repo)]
+    def get_project_repo_artifacts(self, project: str, repo: str) -> list[dict]:
+        return [{'time': artifact['push_time'], 'digest': artifact['digest'],
+                 'tags': [] if artifact['tags'] is None else [tag['name'] for tag in artifact['tags']]} for artifact in
+                self.api.project_repo_artifacts(project, repo)]
 
-    def scan_project_repo_artefacts(self, project: str, repo: str) -> list[dict]:
-        logging.info(f'Scanning {self.api.registry_fqdn} / {project} / {repo}')
+    def scan_project_repo_artifacts(self, project: str, repo: str) -> list[dict]:
+        logging.debug(f'Scanning {self.api.registry_fqdn} project {project} repo {repo}')
         try:
-            artefacts = self.get_project_repo_artefacts(project, repo)
+            artifacts = self.get_project_repo_artifacts(project, repo)
         except urllib.error.HTTPError as e:
-            logging.warning(f'Could not scan project {project} repo {repo} artefacts : {e}.')
+            logging.warning(f'Could not scan project {project} repo {repo} artifacts : {e}.')
             return []
-        return artefacts
+        logging.info(f'Found {len(artifacts)} artifacts for project {project} repo {repo}')
+        return artifacts
 
     def scan_project_repos(self, project: str) -> dict:
-        logging.info(f'Scanning {self.api.registry_fqdn} / {project}')
+        logging.debug(f'Scanning {self.api.registry_fqdn} project {project}')
         try:
             repos = self.get_project_repos(project)
         except urllib.error.HTTPError as e:
             logging.warning(f'Could not scan project {project} repos : {e}.')
             return dict()
-        logging.debug(f'Found repos for project {project} : {" ".join(repos)}')
-        return {repo: self.scan_project_repo_artefacts(project, repo) for repo in repos if
-                self.matches_filter([project, repo])}
+        details = '' if len(repos) == 0 else f': {" ".join(repos)}'
+        logging.info(f'Found {len(repos)} repos for project {project}{details}')
+        with ThreadPoolExecutor() as executor:
+            results = executor.map(partial(self.scan_project_repo_artifacts, project), repos)
+        return dict(zip(repos, results))
 
     def ls(self) -> dict:
-        logging.info(f'Scanning {self.api.registry_fqdn}')
+        logging.debug(f'Scanning {self.api.registry_fqdn}')
         try:
             projects = self.get_projects()
         except urllib.error.HTTPError as e:
             logging.warning(f'Could not scan registry {self.api.registry_fqdn} projects : {e}.')
             return dict()
-        logging.debug(f'Found projects: {" ".join(projects)}')
-        return {project: self.scan_project_repos(project) for project in projects if self.matches_filter([project])}
+        details = '' if len(projects) == 0 else f': {" ".join(projects)}'
+        logging.info(f'Found {len(projects)} projects{details}')
+        with ThreadPoolExecutor() as executor:
+            results = executor.map(self.scan_project_repos, projects)
+        return dict(zip(projects, results))

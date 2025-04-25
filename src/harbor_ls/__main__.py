@@ -11,17 +11,9 @@ import logging
 import os
 import sys
 from argparse import ArgumentParser
+from time import perf_counter
 
-from harbor_ls import HarborLs
-
-import urllib.error
-import urllib.request
-
-
-def _activate_urllib_debug_logging() -> None:
-    handlers = [urllib.request.HTTPHandler(debuglevel=1), urllib.request.HTTPSHandler(debuglevel=1)]
-    opener = urllib.request.build_opener(*handlers)
-    urllib.request.install_opener(opener)
+from harbor_ls import HarborLs, HarborApi
 
 
 def _print_results_json(results: dict, indent=4) -> None:
@@ -50,7 +42,9 @@ def cli(argv: list[str] = None) -> None:
     args = parser.parse_args(argv)
     logging.basicConfig(format='%(levelname)s %(message)s', level=getattr(logging, args.level.upper()))
     if args.level == 'debug':
-        _activate_urllib_debug_logging()
+        HarborApi.activate_urllib_debug_logging()
+
+    start = perf_counter()
 
     try:
         scanner = HarborLs(registry_fqdn=args.registry, user=args.user, password=args.password, filters=args.filters)
@@ -70,6 +64,8 @@ def cli(argv: list[str] = None) -> None:
     else:
         logging.error(f'Unknown format: {args.format}')
         sys.exit(1)
+
+    logging.info(f'Finished in {perf_counter() - start} seconds')
 
 
 if __name__ == '__main__':
